@@ -1,0 +1,73 @@
+#! /bin/bash
+#
+# git clean-stale-local -- Cleans stale, merged local branches with obsolete remote tracking.
+#
+# (c) 2016 Christophe Porteneuve <christophe@delicious-insights.com>
+#
+# Licensed under the MIT license.
+
+{ [ "$1" = '-n' ] || [ "$1" = '--dry-run' ]; } && dryRun=true || dryRun=false
+
+function cleanupStaleLocaleBranch()
+{
+  local branch="$1"
+  if $dryRun; then
+    echo "Would clean up local $branch that uses stale origin remote tracking."
+  else
+    echo "Cleaning up local $branch that uses stale origin remote tracking…"
+    git branch --delete --quiet "$branch"
+  fi
+}
+
+# Determines the default ("central") branch.  Not necessarily `master`.
+# Based on the origin's HEAD (default) branch.  If not cached locally (which
+# happens when we're the original pusher from this local repo), get it remotely
+# and cache the remote ref on-the-fly.
+#
+# If no `origin/HEAD` can be determined, exit the script with exit code
+# `EX_UNAVAILABLE` (69) and a proper error message on STDERR.
+#
+# Otherwise just display the short branch name (this function should be called within
+# output capture, e.g. `$(getDefaultBranch)`).
+function getDefaultBranch()
+{
+  local cachedPath="$(git rev-parse --git-dir)/refs/remotes/origin/HEAD"
+  if [ -f "$cachedPath" ]; then
+    sed --quiet 's@ref: refs/remotes/origin/@@p' "$cachedPath"
+    return
+  fi
+  local ref=$(git ls-remote --symref origin HEAD | sed -n 's@ref: refs/heads/@@p' | cut -f1)
+  if [ $? -eq 0 ]; then
+    echo "ref: refs/remotes/origin/$ref" > "$cachedPath"
+    echo $ref
+    return
+  fi
+  echo "Cannot determine default branch: no readable origin/HEAD anywhere." >&2
+  exit 69 # EX_UNAVAILABLE
+}
+
+# Lists local branches that are merged in the default branch.
+# This excludes the default branch itself.
+function getLocallyMergedBranches()
+{
+  local defaultBranch=$(getDefaultBranch)
+  git branch --merged "$defaultBranch" | grep -v "^  $defaultBranch\$"
+}
+
+# Determines whether a given local branch (passed as argument) tracks a now-unknown
+# remote branch on `origin`.
+function isBranchTrackingStale()
+{
+  local branch="$1"
+  local branchRemote=$(git config --local "branch.$branch.remote")
+  [ -z "$branchRemote" ] && return 1
+  [ "$branchRemote" != 'origin' ] && return 1
+
+  local remoteBranch=$(git config --local "branch.$branch.merge" | sed 's@refs/heads/@@')
+  ! [ -f "$(git rev-parse --git-dir)/refs/remotes/origin/$remoteBranch" ]
+}
+
+for branch in $(getLocallyMergedBranches); do
+  isBranchTrackingStale "$branch" || continue
+  cleanupStaleLocaleBranch "$branch"
+done
