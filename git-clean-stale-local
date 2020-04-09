@@ -33,7 +33,7 @@ function getDefaultBranch()
 {
   local cachedPath="$(git rev-parse --git-dir)/refs/remotes/origin/HEAD"
   if [ -f "$cachedPath" ]; then
-    sed --quiet 's@ref: refs/remotes/origin/@@p' "$cachedPath"
+    sed -n 's@ref: refs/remotes/origin/@@p' "$cachedPath"
     return
   fi
   local ref=$(git ls-remote --symref origin HEAD | sed -n 's@ref: refs/heads/@@p' | cut -f1)
