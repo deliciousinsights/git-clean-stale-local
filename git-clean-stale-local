@@ -6,7 +6,9 @@
 #
 # Licensed under the MIT license.
 
-{ [ "$1" = '-n' ] || [ "$1" = '--dry-run' ] || [ "$2" = '-n' ] || [ "$2" = '--dry-run' ]; } && dryRun=true || dryRun=false
+all_args=" $* "
+regex=' (-n|--dry-run) '
+[[ $all_args =~ $regex ]] && dryRun=true || dryRun=false
 
 # Default remote is `origin` but can be overriden using `origin` option
 origin='origin'
