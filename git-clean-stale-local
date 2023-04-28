@@ -6,15 +6,22 @@
 #
 # Licensed under the MIT license.
 
-{ [ "$1" = '-n' ] || [ "$1" = '--dry-run' ]; } && dryRun=true || dryRun=false
+all_args=" $* "
+regex=' (-n|--dry-run) '
+[[ $all_args =~ $regex ]] && dryRun=true || dryRun=false
+
+# Default remote is `origin` but can be overriden using `origin` option
+origin='origin'
+{ [ "$1" = '--origin' ]; } && origin="$2"
+{ [ "$2" = '--origin' ]; } && origin="$3"
 
 function cleanupStaleLocaleBranch()
 {
   local branch="$1"
   if $dryRun; then
-    echo "Would clean up local $branch that uses stale origin remote tracking."
+    echo "Would clean up local $branch that uses stale $origin remote tracking."
   else
-    echo "Cleaning up local $branch that uses stale origin remote tracking…"
+    echo "Cleaning up local $branch that uses stale $origin remote tracking…"
     git branch --delete --quiet "$branch"
   fi
 }
@@ -31,18 +38,18 @@ function cleanupStaleLocaleBranch()
 # output capture, e.g. `$(getDefaultBranch)`).
 function getDefaultBranch()
 {
-  local cachedPath="$(git rev-parse --git-dir)/refs/remotes/origin/HEAD"
+  local cachedPath="$(git rev-parse --git-dir)/refs/remotes/$origin/HEAD"
   if [ -f "$cachedPath" ]; then
-    sed -n 's@ref: refs/remotes/origin/@@p' "$cachedPath"
+    sed -n "s@ref: refs/remotes/$origin/@@p" "$cachedPath"
     return
   fi
-  local ref=$(git ls-remote --symref origin HEAD | sed -n 's@ref: refs/heads/@@p' | cut -f1)
+  local ref=$(git ls-remote --symref $origin HEAD | sed -n 's@ref: refs/heads/@@p' | cut -f1)
   if [ $? -eq 0 ]; then
-    echo "ref: refs/remotes/origin/$ref" > "$cachedPath"
+    echo "ref: refs/remotes/$origin/$ref" > "$cachedPath"
     echo $ref
     return
   fi
-  echo "Cannot determine default branch: no readable origin/HEAD anywhere." >&2
+  echo "Cannot determine default branch: no readable $origin/HEAD anywhere." >&2
   exit 69 # EX_UNAVAILABLE
 }
 
@@ -61,10 +68,10 @@ function isBranchTrackingStale()
   local branch="$1"
   local branchRemote=$(git config --local "branch.$branch.remote")
   [ -z "$branchRemote" ] && return 1
-  [ "$branchRemote" != 'origin' ] && return 1
+  [ "$branchRemote" != $origin ] && return 1
 
   local remoteBranch=$(git config --local "branch.$branch.merge" | sed 's@refs/heads/@@')
-  ! [ -f "$(git rev-parse --git-dir)/refs/remotes/origin/$remoteBranch" ]
+  ! [ -f "$(git rev-parse --git-dir)/refs/remotes/$origin/$remoteBranch" ]
 }
 
 for branch in $(getLocallyMergedBranches); do
